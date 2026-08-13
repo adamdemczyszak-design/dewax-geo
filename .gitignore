@@ -1,0 +1,26 @@
+# zaleznosci i artefakty builda
+node_modules/
+dist/
+.netlify/
+build/
+coverage/
+
+# pliki lokalne / sekrety
+.env
+.env.*
+!.env.example
+*.local
+secrets.json
+*.pem
+*.key
+*.pfx
+
+# logi i cache
+*.log
+npm-debug.log*
+.vite/
+.cache/
+
+# system
+.DS_Store
+Thumbs.db

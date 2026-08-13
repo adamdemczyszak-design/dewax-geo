@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[functions."analyze"]
+  # Analiza OODA moze wymagac wielu zapytan do CBDG.
+  included_files = []
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
