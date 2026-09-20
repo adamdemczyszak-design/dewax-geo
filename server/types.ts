@@ -8,7 +8,7 @@ export interface LatLon {
   lon: number
 }
 
-export type LocationMethod = 'gps' | 'address'
+export type LocationMethod = 'gps' | 'address' | 'map' | 'parcel'
 
 export interface ResolvedLocation extends LatLon {
   method: LocationMethod
@@ -18,7 +18,7 @@ export interface ResolvedLocation extends LatLon {
   accuracyM: number | null
   provider: string
   /** Poziom dopasowania geokodera. */
-  matchLevel?: 'address' | 'street' | 'city' | 'gps'
+  matchLevel?: 'address' | 'street' | 'city' | 'gps' | 'parcel' | 'map'
 }
 
 /** Pojedyncza warstwa litologiczna z profilu otworu CBDG. */

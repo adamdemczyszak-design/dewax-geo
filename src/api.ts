@@ -1,14 +1,16 @@
 import type { GshpReport } from '../server/types'
 import type { GeocodeOutcome } from '../server/geocoder/geocoderService'
 import type { EndpointDescriptor } from '../server/endpoints'
+import type { Suggestion } from '../server/geocoder/suggestAdapter'
 
 export interface AnalyzeInput {
   lat: number
   lon: number
   targetDepthM: number
-  method: 'gps' | 'address'
+  method: 'gps' | 'address' | 'map' | 'parcel'
   locationLabel: string
   accuracyM: number | null
+  matchLevel?: 'address' | 'street' | 'city' | 'gps' | 'parcel' | 'map'
   /** Opcjonalne — włącza wstępny dobór długości odwiertów. */
   heatPumpKw?: number | null
   scop?: number | null
@@ -44,6 +46,7 @@ export async function geocode(q: {
   houseNumber?: string
   postalCode?: string
   city?: string
+  parcelId?: string
 }): Promise<GeocodeOutcome> {
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(q)) if (v?.trim()) params.set(k, v.trim())
@@ -59,4 +62,27 @@ export async function fetchEndpoints(): Promise<{
 }> {
   const res = await fetch('/api/endpoints')
   return parse(res)
+}
+
+/**
+ * Podpowiedzi nazw przy wpisywaniu.
+ *
+ * `signal` pozwala anulowac zapytanie, gdy uzytkownik pisze dalej - bez tego
+ * wolniejsza odpowiedz dla krotszego przedrostka potrafilaby nadpisac swiezsza
+ * liste i lista "skakalaby" pod palcami.
+ */
+export async function suggest(
+  kind: 'city' | 'street',
+  q: string,
+  near?: { lat: number; lon: number } | null,
+  signal?: AbortSignal,
+): Promise<Suggestion[]> {
+  const params = new URLSearchParams({ kind, q })
+  if (near) {
+    params.set('lat', String(near.lat))
+    params.set('lon', String(near.lon))
+  }
+  const res = await fetch(`/api/suggest?${params}`, { signal })
+  const data = await parse<{ suggestions: Suggestion[] }>(res)
+  return data.suggestions ?? []
 }

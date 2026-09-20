@@ -19,6 +19,7 @@ export default function App() {
         lon: pick.lon,
         targetDepthM: design.targetDepthM,
         method: pick.method,
+        matchLevel: pick.matchLevel,
         locationLabel: pick.label,
         accuracyM: pick.accuracyM,
         heatPumpKw: design.heatPumpKw,
