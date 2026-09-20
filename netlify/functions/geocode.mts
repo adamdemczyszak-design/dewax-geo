@@ -11,10 +11,17 @@ export default async (req: Request): Promise<Response> => {
     houseNumber: url.searchParams.get('houseNumber') ?? undefined,
     postalCode: url.searchParams.get('postalCode') ?? undefined,
     city: url.searchParams.get('city') ?? undefined,
+    parcelId: url.searchParams.get('parcelId') ?? undefined,
   }
 
-  if (!q.city?.trim()) {
-    return json({ error: 'Pole „miejscowość" jest wymagane do geokodowania.' }, 400)
+  // Wystarczy jedno z dwoch: miejscowosc albo numer dzialki ewidencyjnej.
+  // Dzialka niezabudowana czesto nie ma jeszcze adresu, a odwiert i tak
+  // wykonuje sie na dzialce.
+  if (!q.city?.trim() && !q.parcelId?.trim()) {
+    return json(
+      { error: 'Podaj miejscowość albo identyfikator działki ewidencyjnej.' },
+      400,
+    )
   }
 
   try {

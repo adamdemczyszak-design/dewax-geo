@@ -18,6 +18,7 @@ export default async (req: Request): Promise<Response> => {
     lon?: unknown
     targetDepthM?: unknown
     method?: unknown
+    matchLevel?: unknown
     locationLabel?: unknown
     accuracyM?: unknown
     heatPumpKw?: unknown
@@ -48,14 +49,16 @@ export default async (req: Request): Promise<Response> => {
   const location: ResolvedLocation = {
     lat,
     lon,
-    method: body.method === 'gps' ? 'gps' : 'address',
+    method: asMethod(body.method),
     label:
       typeof body.locationLabel === 'string' && body.locationLabel.trim()
         ? body.locationLabel.trim()
         : 'Punkt wskazany przez użytkownika',
     accuracyM: Number.isFinite(Number(body.accuracyM)) ? Number(body.accuracyM) : null,
-    provider: body.method === 'gps' ? 'navigator.geolocation' : 'geokoder',
-    matchLevel: body.method === 'gps' ? 'gps' : undefined,
+    provider: asMethod(body.method) === 'gps' ? 'navigator.geolocation' : 'geokoder',
+    // Poziom dopasowania ustala geokoder i musi dotrwac do raportu - to on
+    // decyduje, czy wynik dotyczy dzialki, czy calej miejscowosci.
+    matchLevel: asMatchLevel(body.matchLevel, asMethod(body.method)),
   }
 
   const audit = new AuditLog()
@@ -91,4 +94,26 @@ function json(data: unknown, status: number): Response {
 
 export const config: Config = {
   path: '/api/analyze',
+}
+
+const METHODS = ['gps', 'address', 'map', 'parcel'] as const
+const LEVELS = ['address', 'street', 'city', 'gps', 'parcel', 'map'] as const
+
+function asMethod(v: unknown): ResolvedLocation['method'] {
+  return (METHODS as readonly string[]).includes(v as string)
+    ? (v as ResolvedLocation['method'])
+    : 'address'
+}
+
+function asMatchLevel(
+  v: unknown,
+  method: ResolvedLocation['method'],
+): ResolvedLocation['matchLevel'] {
+  if ((LEVELS as readonly string[]).includes(v as string)) {
+    return v as ResolvedLocation['matchLevel']
+  }
+  if (method === 'gps') return 'gps'
+  if (method === 'map') return 'map'
+  if (method === 'parcel') return 'parcel'
+  return undefined
 }

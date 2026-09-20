@@ -12,6 +12,8 @@ export interface GeocodeQuery {
   houseNumber?: string
   postalCode?: string
   city?: string
+  /** Identyfikator dzialki ewidencyjnej wg TERYT, np. 141201_1.0001.1867/2. */
+  parcelId?: string
 }
 
 export interface GeocodeCandidate extends ResolvedLocation {
@@ -19,6 +21,8 @@ export interface GeocodeCandidate extends ResolvedLocation {
   formatted: string
   /** Dodatkowe identyfikatory rejestrowe (TERYT/SIMC/ULIC) jesli dostepne. */
   registry?: Record<string, string | null>
+  /** Obrys dzialki ewidencyjnej w WGS84 - tylko dla wynikow z ULDK. */
+  outline?: Array<[number, number]>
 }
 
 export interface GeocoderAdapter {
@@ -31,6 +35,7 @@ export interface GeocoderAdapter {
 }
 
 export function formatQuery(q: GeocodeQuery): string {
+  if (q.parcelId?.trim()) return `działka ${q.parcelId.trim()}`
   return [
     [q.street, q.houseNumber].filter(Boolean).join(' '),
     [q.postalCode, q.city].filter(Boolean).join(' '),

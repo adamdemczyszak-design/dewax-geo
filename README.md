@@ -125,28 +125,70 @@ do kontroli pokrycia obszaru dodatkowymi analizami.
 
 | | |
 |---|---|
-| **Dostawca** | GUGiK — Usługa Uniwersalnej Wyszukiwarki (UUG) |
+| **Dostawca podstawowy** | GUGiK — Usługa Uniwersalnej Wyszukiwarki (UUG) |
 | **Adres** | `https://services.gugik.gov.pl/uug/?request=GetAddress&location=…&srid=4326` |
+| **Działki ewidencyjne** | GUGiK — ULDK, `https://uldk.gugik.gov.pl/?request=GetParcelById&id=…` |
+| **Dostawca zapasowy** | Nominatim / OpenStreetMap (nieoficjalny) |
 
 Geokoder zamienia adres na współrzędne **i nic więcej**. Nie dostarcza żadnych informacji
 o gruncie i żadne jego dane nie trafiają do części geologicznej raportu.
 
-Zachowanie usługi ustalone empirycznie:
+Zachowanie usługi UUG ustalone empirycznie:
 
-- `location=Miasto, Ulica` → typ `street`, zwraca geometrię ulicy → **niepewność ~300 m**
-- `location=Miasto` → typ `city`, zwraca punkty miejscowości → **niepewność ~2000 m**
-- zapytanie z numerem domu jest odrzucane przez filtr dokładności usługi
-  (`found objects: 15, returned objects: 0`)
-- kod pocztowy nie jest przyjmowany jako zapytanie (`Blad zapytania.`) — służy wyłącznie
-  do zawężania wyników
+- `location=Miasto, Ulica Numer` → typ `address`, **punkt adresowy EMUiA, niepewność ~15 m**;
+  odpowiedź niesie też numer, kod pocztowy i identyfikatory TERYT/SIMC/ULIC
+- `location=Miejscowość Numer` → to samo dla wsi o zabudowie numerowanej, **bez ulicy**
+- `location=Miasto, Ulica` → typ `street`, geometria ulicy → niepewność ~300 m
+- `location=Miasto` → typ `city`, punkt miejscowości → niepewność ~2000 m
+- nieistniejący numer daje `found objects > 0` przy `returned objects: 0` — usługa odrzuca
+  dopasowanie własnym filtrem `only exact numbers`, co łatwo pomylić z awarią usługi
+- kod pocztowy nie jest przyjmowany jako zapytanie — służy wyłącznie do zawężania wyników
+  po stronie aplikacji, i to **nie-destrukcyjnie** (błędny kod nie kasuje wyników)
 
-Dlatego adapter próbuje kolejno *ulica → miejscowość* i **jawnie raportuje poziom
-dopasowania oraz wynikającą z niego niepewność pozycji**. Wiertacz musi wiedzieć, czy
-punkt to działka, czy środek ulicy.
+Adapter schodzi kaskadą *numer domu → numer bez wyróżnika („10A" → „10") → ulica →
+miejscowość* i **jawnie raportuje poziom dopasowania oraz wynikającą z niego niepewność
+pozycji**. Wiertacz musi wiedzieć, czy punkt to działka, czy środek miejscowości. Numer,
+którego usługa nie zlokalizowała, **nie jest doklejany** do wyniku ulicowego — sugerowałby
+precyzję, której ten punkt nie ma.
 
-Adapter zapasowy (Nominatim/OSM) jest **domyślnie wyłączony**; włącza go zmienna
-`GEOCODER_FALLBACK=nominatim`. Służy wyłącznie do lokalizacji adresu — nigdy do danych
-geologicznych.
+Wyszukiwanie po **numerze działki ewidencyjnej** (ULDK) jest równorzędną ścieżką: działka
+niezabudowana często nie ma jeszcze adresu, a odwiert i tak wykonuje się na działce. ULDK
+zwraca pełny obrys w PL-1992 (EPSG:2180); aplikacja przelicza go na WGS84, liczy środek
+ciężkości i rysuje granice na mapie wyboru punktu. Niepewność to promień koła o polu
+działki, a nie stała.
+
+Adapter zapasowy (Nominatim/OSM) jest **domyślnie włączony** i uruchamia się tylko wtedy,
+gdy GUGiK nie zwrócił nic albo zwrócił sam środek miejscowości — ratuje to wpisy z
+literówką lub bez polskich znaków („Wolka Kosowska"). Wyłącza go `GEOCODER_FALLBACK=off`.
+Służy wyłącznie do lokalizacji adresu — nigdy do danych geologicznych.
+
+#### Podpowiedzi nazw przy wpisywaniu (`/api/suggest`)
+
+Osobny moduł, o **węższej odpowiedzialności niż geokoder**: dostarcza wyłącznie *tekst*
+do wpisania w pole formularza. Nie ustala pozycji otworu i nie podaje współrzędnych do
+raportu — po wybraniu podpowiedzi adres i tak przechodzi pełną kaskadę GUGiK UUG, która
+pozostaje jedynym źródłem współrzędnych adresowych.
+
+Dostawcą jest Photon (OpenStreetMap). Powód jest wymuszony przez zachowanie UUG:
+usługa dopasowuje nazwy **dokładnie** i na częściowy wpis („Wola Kieł", „Warsza") zwraca
+zero wyników, więc do podpowiedzi nadaje się nie. Photon dopasowuje po przedrostku i
+radzi sobie z zapisem bez polskich znaków — `Wolka Kos` → **Wólka Kosowska**,
+`Minsk Maz` → **Mińsk Mazowiecki** — co jest tu całym sensem funkcji.
+
+| | |
+|---|---|
+| **Miejscowości** | `osm_tag=place`, ramka Polski `14.07,49.0,24.15,54.9` |
+| **Ulice** | `osm_tag=highway`, ramka ±0,2° wokół wybranej miejscowości (~20 km) |
+| **Próg** | od 3 znaków; opóźnienie 250 ms; poprzednie zapytanie anulowane (`AbortController`) |
+| **Cache** | TTL 1 h, 2000 pozycji — chroni publiczną usługę przy pisaniu |
+
+Lista jest deduplikowana: OSM trzyma długą ulicę jako wiele odcinków, więc bez tego
+„Marszałkowska" pojawiłaby się sześć razy. Miejscowości o tej samej nazwie w różnych
+powiatach **zostają** jako osobne pozycje i są rozróżnione kontekstem (powiat,
+województwo) — bez tego nie da się wybrać właściwej z dwóch wsi „Zakopane".
+
+Awaria tej usługi nie blokuje pracy: lista po prostu się nie pokaże, a nazwę zawsze
+można wpisać ręcznie.
 
 ### 1.8 Źródła świadomie **niewykorzystane**
 
@@ -160,11 +202,12 @@ raport pokazuje ich brak.
 
 ```
 Przeglądarka (React + TS)
-        │  /api/geocode   /api/analyze   /api/endpoints
+        │  /api/suggest  /api/geocode  /api/analyze  /api/endpoints
         ▼
 Funkcje serwerowe Netlify (Node + TS)        ← tu odpytywane są usługi PGI (brak CORS)
         │
-        ├── geocoder/        adapter GUGiK UUG (+ opcjonalny Nominatim)
+        ├── geocoder/        kaskada GUGiK UUG + ULDK (działki) + zapasowy Nominatim
+        │                    + podpowiedzi nazw (Photon/OSM, tylko tekst pól)
         ├── gis/             rzędna terenu z NMT GUGiK
         ├── cbdgClient       transport: URL, cache TTL+LRU, ponowienia, audyt
         ├── mpgnClient       λ i q_v z Mapy Potencjału Geotermii Niskotemperaturowej
@@ -300,17 +343,27 @@ co brak zagrożenia.
 ```bash
 npm install
 npm run dev        # http://localhost:5173 (emulacja funkcji przez @netlify/vite-plugin)
-npm test           # 123 testy jednostkowe
+npm test           # 151 testów jednostkowych
 npm run typecheck
 npm run build
 ```
+
+> **Emulacja edge functions jest wyłączona** w `vite.config.ts`
+> (`edgeFunctions: { enabled: false }`). Projekt nie ma żadnych edge functions, a ich
+> emulator i tak nie startuje: `@netlify/edge-functions-dev` uruchamia
+> `deno eval --allow-scripts …`, a `deno eval` tej flagi nie przyjmuje — również
+> w najnowszym Deno 2.9.x, które wtyczka pobiera sama. Bez tego wyłączenia `npm run dev`
+> kończy się błędem *„Could not establish a connection to the Netlify Edge Functions
+> local development server"*. Wyłączenie dotyczy wyłącznie emulacji lokalnej — wdrożenie
+> na Netlify pozostaje nietknięte. Gdy kiedyś dojdą edge functions, usuń tę opcję.
 
 Zmienne środowiskowe (opcjonalne):
 
 | Zmienna | Domyślnie | Znaczenie |
 |---|---|---|
-| `GEOCODER_FALLBACK` | *(brak)* | `nominatim` włącza pomocniczy geokoder OSM |
+| `GEOCODER_FALLBACK` | *(włączony)* | `off` wyłącza pomocniczy geokoder OSM |
 | `NOMINATIM_URL` | publiczna instancja OSM | adres instancji Nominatim |
+| `PHOTON_URL` | publiczna instancja Photon | adres instancji podpowiedzi nazw |
 
 ---
 
@@ -334,8 +387,9 @@ Zmienne środowiskowe (opcjonalne):
 1. **Pokrycie profilami litologicznymi jest nierówne.** W centrach dużych miast bywa, że na
    1000 otworów w promieniu 1 km tylko kilka ma profil litologiczny w CBDG.
 2. **Limit 1000 rekordów** usługi ArcGIS — przy jego osiągnięciu raport mówi o tym wprost.
-3. **Geokodowanie adresu nie schodzi do numeru domu** (ograniczenie usługi GUGiK). Dla
-   dokładnego wyniku należy użyć GPS na działce.
+3. **Geokoder wskazuje budynek, nie miejsce odwiertu.** Nawet trafiony punkt adresowy
+   (~15 m) to pozycja budynku — wiertnica staje obok. Dlatego każdy wynik trafia najpierw
+   na mapę do potwierdzenia i korekty; najdokładniejszy pozostaje GPS na działce.
 4. **Czytaj ocenę wiarygodności, nie samo pokrycie.** Pokrycie 100% zbudowane z jednego
    otworu oddalonego o 500 m to nie to samo co pokrycie 100% z ośmiu otworów w promieniu
    150 m — i ocena z sekcji 2 to rozróżnia.
